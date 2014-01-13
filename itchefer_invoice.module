@@ -1,0 +1,161 @@
+<?php
+/**
+ * @file
+ * Code for the itchefer_invoice feature.
+ * author : yani@bellcom.dk
+ */
+
+include_once 'itchefer_invoice.features.inc';
+
+/**
+ * Implements hook_menu().
+ */
+function itchefer_invoice_menu() {
+  $items = array();
+  $items['admin/generate_invoice/%'] = array(
+    'title' => t('Generate invoice for a giving event'),
+    'page callback' => '_itchefer_invoice_generate',
+    'page arguments' => array(2),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/generate_invoice/delete/%'] = array(
+    'title' => t('Generate invoice for a giving event'),
+    'page callback' => '_itchefer_invoice_delete',
+    'page arguments' => array(3),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+function _itchefer_invoice_generate($aid) {
+  if (!$aid || (!is_numeric($aid))) {
+    drupal_set_message(t("There is no event seleted to generate invoices."), 'status');
+    drupal_goto('faktura/all');
+    break;
+    //return;
+  }
+  $old_invoice = db_query("SELECT nid FROM {node} n, {field_data_field_event_node_id} f where type = 'itchefer_invoice' and n.nid = f.entity_id and f.field_event_node_id_target_id = $aid")->fetchAll();
+  if ($old_invoice) {
+    drupal_set_message(t("There are old invoices, please delete them before you can generate again."), 'status');
+    drupal_goto('faktura/all');
+    break;
+  //  return;
+  }
+  global $user;
+  // Invoice no. starts with 0;
+  $no = 0;
+  $event_signup_node = db_query("SELECT * FROM {field_data_field_event_node_id} WHERE field_event_node_id_target_id= $aid")->fetchAll();
+  if($event_signup_node) {
+    $year = date("Y");
+    $event = node_load($aid);
+    foreach ($event_signup_node as $item) {
+      // The event_signup ID. (Tilmelding)
+      $nid = $item->entity_id;
+      // The event_signup node.
+      $node = node_load($nid);
+
+      // Create a new itchefer_invoice node.
+      $itchefer_invoice = new stdClass();
+      $itchefer_invoice->language = 'da';
+      $itchefer_invoice->status = 1;
+      $itchefer_invoice->promote = 0;
+      $itchefer_invoice->sticky = 0;
+      $itchefer_invoice->created = REQUEST_TIME;
+      $itchefer_invoice->validated = TRUE;
+
+      $itchefer_invoice->uid = $user->uid ;
+
+      $itchefer_invoice->type = 'itchefer_invoice';
+
+      // Default info for invoice.
+      // Get event detailed info (price, one day price, and the second day price, total price)
+      $field_collection_item = field_collection_item_load($event->field_detailed_info['und'][0]['value']);
+      (int)$invoice_no = $field_collection_item->field_faktura_nr['und'][0]['value'];
+      $faktura_nr = $invoice_no + $no;
+      $itchefer_invoice->field_invoice_no['und'][0]['value'] = $year . "-" . $faktura_nr;
+      $itchefer_invoice->title = "Faktura - ".$event->title ." - " . $faktura_nr;
+      // $itchefer_invoice->field_signup_id['und'][0]['value'] = $signup->sid;
+      // Event ID (Arrangment).
+      $itchefer_invoice->field_event_node_id['und'][0]['target_id'] = $aid;
+      $itchefer_invoice->field_invoice_date['und'][0]['value'] = date("d-m-Y");
+      $itchefer_invoice->field_signup_user['und'][0]['target_id'] = $node->field_signup_user['und'][0]['target_id'];
+
+      // event_signup node ID (Tilmelding).
+      $itchefer_invoice->field_node_signup_id['und'][0]['target_id'] = $nid;
+
+      // Calculate price.
+      /*Nå man tilmelder sig et seminar koster det:
+        Begge dage med overnatning kr. 3.000 + moms
+        Begge dage uden overnatning kr. 2.500 + moms
+        Kun dag 1  (hvis man kun tilmelder sig dag 1 skal vi vide om de ønsker aftensmad) kr. 2.000,- + moms
+        Kun dag 2 (hvis man kun tilmelder sig dag 2 skal vi vide om de ønsker Sandwish/frokost) kr. 1000,- + moms*/
+      $field_signup_day1 = field_collection_item_load($node->field_signup_days['und'][0]['value']);
+      // TRUE (1) for day one when user attends.
+      $signup_day1 = $field_signup_day1->field_signup_day_2_dato['und'][0]['value'];
+      $field_signup_day2 = field_collection_item_load($node->field_signup_day_2['und'][0]['value']);
+      // TRUE (1) for day two when user attends.
+      $signup_day2 = $field_signup_day2->field_signup_day_2_dato['und'][0]['value'];
+      $itchefer_invoice->field_event_price['und'][0]['currency_code'] = "DKK";
+      $itchefer_invoice->field_moms['und'][0]['currency_code'] = "DKK";
+      $itchefer_invoice->field_event_total_price['und'][0]['currency_code'] = "DKK";
+      $overnatning = $field_signup_day1->field_signup_every_night['und'][0]['value'];
+      $pris = 0;
+      // If user has signed up for the pakkage
+      if (isset($node->field_signup_package['und']) && $node->field_signup_package['und'][0]['value'] == 1) {
+        //$pris = $itchefer_invoice->field_event_price['und'][0]['value'] = ;
+        //$moms = $itchefer_invoice->moms['und'][0]['value'] = * 0.25;
+        //$itchefer_invoice->field_event_total_price['und'][0]['value'] = $pris + $moms;
+        $pris = $itchefer_invoice->field_event_price['und'][0]['amount'] = $field_collection_item->field_total_price['und'][0]['amount'];
+      }
+      // If user has signed up for the first day.
+      elseif ($signup_day1 && !$signup_day2) {
+        $pris = $itchefer_invoice->field_event_price['und'][0]['amount'] = $field_collection_item->field_event_day1_price['und'][0]['amount'];
+        if ($overnatning) {
+          $pris = $itchefer_invoice->field_event_price['und'][0]['amount'] = $pris + $field_collection_item->field_event_night_price['und'][0]['amount'];
+        }
+        
+      }
+      // If user has signed up for the second day.
+      elseif (!$signup_day1 && $signup_day2) {
+        $pris = $itchefer_invoice->field_event_price['und'][0]['amount'] = $field_collection_item->field_event_day2_price['und'][0]['amount'];
+      }
+      // If the user has signed up for the first day and second day.
+      elseif ($signup_day1 && $signup_day2) {
+        // If user does NOT want to stay in hotel.
+        if (!$overnatning) {
+          $pris = $itchefer_invoice->field_event_price['und'][0]['amount'] = $field_collection_item->field_total_price['und'][0]['amount'] - $field_collection_item->field_event_night_price['und'][0]['amount'];
+        }
+        else {
+          $pris = $itchefer_invoice->field_event_price['und'][0]['amount'] = $field_collection_item->field_total_price['und'][0]['amount'];
+        }
+      }
+      $moms = $itchefer_invoice->field_moms['und'][0]['amount'] = $pris * 0.25;
+
+      $itchefer_invoice->field_event_total_price['und'][0]['amount'] = $pris + $moms;
+      node_save($itchefer_invoice);
+      $no = $no + 1;
+    }
+  }
+  drupal_set_message(t("There are $no invoices have been generated"), 'status');
+  drupal_goto('faktura/all');
+}
+
+function _itchefer_invoice_delete($aid) {
+  if (!$aid || (!is_numeric($aid))) {
+    return;
+  }
+
+  $old_invoice = db_query("SELECT nid FROM {node} n, {field_data_field_event_node_id} f where type = 'itchefer_invoice' and n.nid = f.entity_id and f.field_event_node_id_target_id = $aid")->fetchAll();
+  $no = 0;
+  if ($old_invoice) {
+    foreach ($old_invoice as $node) {
+      node_delete($node->nid);
+      $no = $no +1;
+    }
+  }
+  drupal_set_message(t("There are $no invoices have been deleted"), 'status');
+  drupal_goto('faktura/all');  
+}
