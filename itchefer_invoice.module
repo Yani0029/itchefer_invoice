@@ -32,14 +32,14 @@ function itchefer_invoice_menu() {
 
 function _itchefer_invoice_generate($aid) {
   if (!$aid || (!is_numeric($aid))) {
-    drupal_set_message(t("There is no event seleted to generate invoices."), 'status');
+    drupal_set_message(t("Der er ingen arrangement, der er udvalgt til at generere fakturaer."), 'status');
     drupal_goto('faktura/all');
     break;
     //return;
   }
   $old_invoice = db_query("SELECT nid FROM {node} n, {field_data_field_event_node_id} f where type = 'itchefer_invoice' and n.nid = f.entity_id and f.field_event_node_id_target_id = $aid")->fetchAll();
   if ($old_invoice) {
-    drupal_set_message(t("There are old invoices, please delete them before you can generate again."), 'status');
+    drupal_set_message(t("Der er gamle fakturaer, før du kan generere igen, skal du slette dem."), 'warning');
     drupal_goto('faktura/all');
     break;
   //  return;
@@ -139,7 +139,7 @@ function _itchefer_invoice_generate($aid) {
       $no = $no + 1;
     }
   }
-  drupal_set_message(t("There are $no invoices have been generated"), 'status');
+  drupal_set_message(t("Der er $no fakturaer, der er blevet genereret."), 'status');
   drupal_goto('faktura/all');
 }
 
@@ -156,6 +156,6 @@ function _itchefer_invoice_delete($aid) {
       $no = $no +1;
     }
   }
-  drupal_set_message(t("There are $no invoices have been deleted"), 'status');
+  drupal_set_message(t("Der er $no fakturaer, der er blevet slettet."), 'status');
   drupal_goto('faktura/all');  
 }
