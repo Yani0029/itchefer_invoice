@@ -73,7 +73,10 @@ function _itchefer_invoice_generate($aid) {
       // Default info for invoice.
       // Get event detailed info (price, one day price, and the second day price, total price)
       $field_collection_item = field_collection_item_load($event->field_detailed_info['und'][0]['value']);
-      (int)$invoice_no = $field_collection_item->field_faktura_nr['und'][0]['value'];
+      if (isset($field_collection_item->field_faktura_nr['und'])) {
+        (int)$invoice_no = $field_collection_item->field_faktura_nr['und'][0]['value'];}
+      else
+        $invoice_no = 001;
       $faktura_nr = $invoice_no + $no;
       $itchefer_invoice->field_invoice_no['und'][0]['value'] = $year . "-" . $faktura_nr;
       $itchefer_invoice->title = "Faktura - ".$event->title ." - " . $faktura_nr;
@@ -92,12 +95,19 @@ function _itchefer_invoice_generate($aid) {
         Begge dage uden overnatning kr. 2.500 + moms
         Kun dag 1  (hvis man kun tilmelder sig dag 1 skal vi vide om de ønsker aftensmad) kr. 2.000,- + moms
         Kun dag 2 (hvis man kun tilmelder sig dag 2 skal vi vide om de ønsker Sandwish/frokost) kr. 1000,- + moms*/
-      $field_signup_day1 = field_collection_item_load($node->field_signup_days['und'][0]['value']);
-      // TRUE (1) for day one when user attends.
-      $signup_day1 = $field_signup_day1->field_signup_day_2_dato['und'][0]['value'];
-      $field_signup_day2 = field_collection_item_load($node->field_signup_day_2['und'][0]['value']);
-      // TRUE (1) for day two when user attends.
-      $signup_day2 = $field_signup_day2->field_signup_day_2_dato['und'][0]['value'];
+      $signup_day2 = 0;
+      if (isset($node->field_signup_days['und'])) {
+        $field_signup_day1 = field_collection_item_load($node->field_signup_days['und'][0]['value']);
+        // TRUE (1) for day one when user attends.
+        $signup_day1 = $field_signup_day1->field_signup_day_2_dato['und'][0]['value'];
+
+}
+      $signup_days = 0;
+      if (isset($node->field_signup_day_2['und'])) {
+        $field_signup_day2 = field_collection_item_load($node->field_signup_day_2['und'][0]['value']);
+        // TRUE (1) for day two when user attends.
+        $signup_day2 = $field_signup_day2->field_signup_day_2_dato['und'][0]['value'];
+      }
       $itchefer_invoice->field_event_price['und'][0]['currency_code'] = "DKK";
       $itchefer_invoice->field_moms['und'][0]['currency_code'] = "DKK";
       $itchefer_invoice->field_event_total_price['und'][0]['currency_code'] = "DKK";
